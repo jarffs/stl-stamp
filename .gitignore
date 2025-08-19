@@ -1,0 +1,4 @@
+# Node / IDE stuff (não necessário aqui, mas útil se expandir)
+node_modules/
+.DS_Store
+*.log

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SVG to STL/3MF Stamp Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/examples/js/exporters/STLExporter.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/examples/js/exporters/3MFExporter.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/examples/js/loaders/SVGLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    body { margin: 0; font-family: sans-serif; background: #f0f0f0; }
+    canvas { display: block; }
+    #controls {
+      position: fixed;
+      top: 10px; left: 10px;
+      background: rgba(255,255,255,0.95);
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    button, input[type="file"] {
+      margin-top: 6px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button {
+      background: #0077ff;
+      color: white;
+      display: none; /* escondido até ter preview */
+    }
+    button:hover {
+      background: #005dcc;
+    }
+    #preview-label {
+      position: fixed;
+      top: 10px; right: 10px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      display: none; /* aparece só quando tem modelo */
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <h2>SVG Stamp Generator</h2>
+    <p>Upload or drag an SVG file below to generate a 3D stamp. You can preview and download the result as STL or 3MF.</p>
+    <div id="drop-area" style="border:2px dashed #0077ff; border-radius:8px; padding:20px; background:#eaf4ff; text-align:center; margin-bottom:10px;">
+      <input type="file" id="upload" accept=".svg" style="display:none">
+      <label for="upload" style="cursor:pointer; color:#0077ff; font-weight:bold;">Click to select SVG or drag here</label>
+      <div id="drop-message" style="color:#888; font-size:13px; margin-top:6px;">No file selected.</div>
+    </div>
+    <button id="downloadSTL">Download STL</button>
+    <button id="download3MF">Download 3MF</button>
+    <div id="error-message" style="color:#d00; margin-top:8px; display:none;"></div>
+  </div>
+  <div id="preview-label">Model Preview</div>
+  <script>
+    let scene = new THREE.Scene();
+    let camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+    let renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    let light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(1, 1, 1).normalize();
+    scene.add(light);
+
+    // Controles de navegação no preview
+    let controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.rotateSpeed = 0.8;
+    controls.zoomSpeed = 1.2;
+
+    let object3D;
+    const btnSTL = document.getElementById('downloadSTL');
+    const btn3MF = document.getElementById('download3MF');
+    const previewLabel = document.getElementById('preview-label');
+
+    // Drag-and-drop and file upload logic
+    const dropArea = document.getElementById('drop-area');
+    const uploadInput = document.getElementById('upload');
+    const dropMessage = document.getElementById('drop-message');
+    const errorMessage = document.getElementById('error-message');
+
+    function handleSVGFile(file) {
+      if (!file || !file.name.match(/\.svg$/i)) {
+        errorMessage.textContent = "Please upload a valid SVG file.";
+        errorMessage.style.display = "block";
+        return;
+      }
+      errorMessage.style.display = "none";
+      let reader = new FileReader();
+      reader.onload = (event) => {
+        let svgText = event.target.result;
+        let loader = new THREE.SVGLoader();
+        let paths;
+        try {
+          paths = loader.parse(svgText).paths;
+        } catch (err) {
+          errorMessage.textContent = "Error parsing SVG. Please check your file.";
+          errorMessage.style.display = "block";
+          return;
+        }
+        if (!paths.length) {
+          errorMessage.textContent = "SVG contains no paths.";
+          errorMessage.style.display = "block";
+          return;
+        }
+        let group = new THREE.Group();
+        // Base circular fixa (40mm diâmetro, 1.5mm espessura)
+        let baseGeometry = new THREE.CylinderGeometry(20, 20, 1.5, 128);
+        let baseMaterial = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+        let baseMesh = new THREE.Mesh(baseGeometry, baseMaterial);
+        baseMesh.position.z = -0.75;
+        group.add(baseMesh);
+        // SVG extrudado dentro do círculo
+        paths.forEach(path => {
+          let shapes = path.toShapes(true);
+          shapes.forEach(shape => {
+            let geometry = new THREE.ExtrudeGeometry(shape, { depth: 1.5, bevelEnabled: false });
+            let material = new THREE.MeshPhongMaterial({ color: 0x0077ff });
+            let mesh = new THREE.Mesh(geometry, material);
+            geometry.computeBoundingBox();
+            let bbox = geometry.boundingBox;
+            let svgWidth = bbox.max.x - bbox.min.x;
+            let svgHeight = bbox.max.y - bbox.min.y;
+            let maxDim = Math.max(svgWidth, svgHeight);
+            let scale = (38 / maxDim); // margem de 1mm
+            mesh.scale.set(scale, scale, 1);
+            mesh.position.x = - (bbox.min.x + svgWidth / 2) * scale;
+            mesh.position.y = - (bbox.min.y + svgHeight / 2) * scale;
+            mesh.position.z = 0;
+            group.add(mesh);
+          });
+        });
+        if (object3D) scene.remove(object3D);
+        object3D = group;
+        scene.add(group);
+        // Centraliza a câmera
+        camera.position.set(0, -50, 50);
+        camera.lookAt(0, 0, 0);
+        // Mostra botões e preview label
+        btnSTL.style.display = "inline-block";
+        btn3MF.style.display = "inline-block";
+        previewLabel.style.display = "inline-block";
+        dropMessage.textContent = `Loaded: ${file.name}`;
+      };
+      reader.readAsText(file);
+    }
+
+    dropArea.addEventListener('click', () => uploadInput.click());
+    dropArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropArea.style.background = '#d0eaff';
+    });
+    dropArea.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dropArea.style.background = '#eaf4ff';
+    });
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropArea.style.background = '#eaf4ff';
+      let file = e.dataTransfer.files[0];
+      handleSVGFile(file);
+    });
+    uploadInput.addEventListener('change', (e) => {
+      let file = e.target.files[0];
+      handleSVGFile(file);
+    });
+
+    btnSTL.addEventListener('click', () => {
+      if (!object3D) return;
+      let exporter = new THREE.STLExporter();
+      let stl = exporter.parse(object3D);
+      let blob = new Blob([stl], { type: 'application/vnd.ms-pki.stl' });
+      let link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'stamp.stl';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    btn3MF.addEventListener('click', () => {
+      if (!object3D) return;
+      let exporter = new THREE.ThreeMFExporter();
+      let res = exporter.parse(object3D);
+      let blob = new Blob([res], { type: 'model/3mf' });
+      let link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'stamp.3mf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    camera.position.z = 100;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

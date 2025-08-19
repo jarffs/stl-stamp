@@ -2,15 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>SVG to STL/3MF</title>
+  <title>SVG to STL/3MF Stamp Generator</title>
   <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/examples/js/exporters/STLExporter.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/examples/js/exporters/3MFExporter.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/examples/js/loaders/SVGLoader.js"></script>
   <style>
-    body { margin: 0; }
+    body { margin: 0; font-family: sans-serif; }
     canvas { display: block; }
-    #controls { position: fixed; top: 10px; left: 10px; }
+    #controls {
+      position: fixed;
+      top: 10px; left: 10px;
+      background: rgba(255,255,255,0.9);
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    button, input[type="file"] {
+      margin-top: 6px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button {
+      background: #0077ff;
+      color: white;
+    }
+    button:hover {
+      background: #005dcc;
+    }
   </style>
 </head>
 <body>
